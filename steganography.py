@@ -16,14 +16,14 @@ def decimal_encoding(text: str):
         raise ValueError(f'Failed to encode: {text}') from e
 
 
-def load_image(filepath: str, type: str = '.png'):
+def load_image(filename: str, type: str = '.png'):
     ''' Returns: Image object and Enum of WIDTH and HEIGHT. '''
-    if not filepath.endswith(type): # Only support PNG
-        filepath += type
+    if not filename.endswith(type): # Only support PNG
+        filename += type
     try:
-        image = Image.open(filepath)
+        image = Image.open(f'Images/{filename}')
     except Exception as e:
-        raise ValueError(f'No .PNG at {filepath}') from e
+        raise ValueError(f'No .PNG at Images/{filename}') from e
     size = image.size
     class Size():
         WIDTH = size[0]
@@ -38,12 +38,12 @@ def shuffle(key: int, data):
     return sample(data, len(data))
 
 
-def generate_context(key: int, image: Image, Size: object, key_pixels: int = 16):
+def generate_context(key: int, Image: Image, Size: object, key_pixels: int = 16):
     ''' Returns: List of tuple coordinates in image and image specific key. '''
     key = decimal_encoding(key)
     key *= (Size.PIXELS * 99) # Adjust key by image size
     coords = shuffle(key, [*product(range(Size.WIDTH), range(Size.HEIGHT))])
-    pixels = [image.getpixel((coords[point][0], coords[point][1]))
+    pixels = [Image.getpixel((coords[point][0], coords[point][1]))
               for point in range(key_pixels - 1)]
     key *= (sum(map(sum, pixels))) # Adjust key by key pixels
     coords = shuffle(key, coords[key_pixels:])
@@ -79,28 +79,28 @@ def integer_conversion(data: int, method: str):
         return int(data, 2)
 
 
-def attach_header(image: Image, key: int, header: str, coords: list):
+def attach_header(Image: Image, key: int, header: str, coords: list):
     ''' Returns: Modified image with header data attached for extraction. '''
     length = len(header) # Stored as random method any colour, smallest index
     colours = random_sample(key, [0,1,2], length)
     colours = [item for sublist in colours for item in sublist]
-    pixels = [list(image.getpixel((coords[point][0], coords[point][1])))
+    pixels = [list(Image.getpixel((coords[point][0], coords[point][1])))
               for point in range(length - 1)]
     for i, pixel in enumerate(pixels):
         value = integer_conversion(pixel[colours[i]], 'binary')
         modified_value = integer_conversion(value[:-1] + header[i], 'integer')
         pixels[i][colours[i]] = modified_value 
     pixels = [tuple(list) for list in pixels] # Convert back to tuples
-    [image.putpixel((coords[point][0], coords[point][1]), pixels[point])
+    [Image.putpixel((coords[point][0], coords[point][1]), pixels[point])
      for point in range(length - 1)]
-    return coords[length:], image    
+    return coords[length:], Image    
 
 
 def build_object(key: int, method: str, noise: bool, colours: list, indexs: list):
     ''' Returns: Configuration object of steganographic storage settings. '''
-    if colours is None:
+    if colours == None:
         colours = [0,1,2] # Default to all colours
-    if indexs is None:
+    if indexs == None:
         indexs = [6,7] # Default to two least significant bits
     colour_list = ['red', 'green', 'blue']
     index_list = ['1st', '2nd', '3rd', '4th', '5th', '6th', '7th']
@@ -151,7 +151,7 @@ def generate_coords(Configuration: object, Size: object, pixel_coords: list):
     key = Configuration.KEY
     length = Size.PIXELS
     if method == 'random': # If random need to pick random colour option per pixel
-        colours = random_sample(key, list(Configuration.COLOURS.values()), length)
+        colours = random_sample(key, colours, length)
     data_coords = []
     for i, coordinate in enumerate(pixel_coords):
         for colour in colours[i] if method == 'random' else colours:
@@ -160,34 +160,43 @@ def generate_coords(Configuration: object, Size: object, pixel_coords: list):
     return shuffle(key, data_coords)
 
 
-def attach_data(image: Image, binary_message: str, coords: list):
-    '''''' # Adjust to only pull the number of pixels required (optimisation)
-    pixels = [list(image.getpixel((location[0], location[1]))) for location in coords]
-    for i in range(len(binary_message)):
-        point = coords[i]
+def attach_data(Image: Image, Configuration: object, binary_message: str, coords: list):
+    ''' Returns: Image with all required pixels steganographically modified. '''
+    if not Configuration.NOISE: # Optimise if not modifying every pixel
+        coords = coords[:len(binary_message)]
+    pixels = [list(Image.getpixel((location[0], location[1]))) for location in coords]
+    for i, point in enumerate(coords):
         value = list(integer_conversion(pixels[i][point[2]], 'binary'))
         value[point[3]] = binary_message[i]
         modified_value = integer_conversion(''.join(value), 'integer')
         pixels[i][point[2]] = modified_value
     pixels = [tuple(list) for list in pixels] # Convert back to tuples
-    [image.putpixel((coords[i][0], coords[i][1]), point)
+    [Image.putpixel((coords[i][0], coords[i][1]), point)
      for i, point in enumerate(pixels)]
-    return image
+    return Image
 
 
-def data_insert(filepath: str, key: str, data: str, method: str = 'random', 
+def save_image(filename: str, Image: Image, type: str = '.png'):
+    ''' Returns: Saved image at location output. '''
+    if not filename.endswith(type):
+        filename = f'{filename}_result{type}'
+    else:
+        filename = f'{filename[:-4]}_result{type}'
+    Image.save(f'Images/{filename}')
+
+
+def data_insert(filename: str, key: str, data: str, method: str = 'random', 
                 colours: list = None, indexs: list = None, noise: bool = True):
     ''' Returns: Selected image with secret data steganographically attached. '''
-    image, Size = load_image(filepath)
-    coords, image_key = generate_context(key, image, Size)
+    Image, Size = load_image(filename)
+    coords, image_key = generate_context(key, Image, Size)
     Configuration = build_object(image_key, method, noise, colours, indexs)
-    header = generate_header(Configuration) # Specifies configuration for extract
-    cut_coords, image = attach_header(image, image_key, header, coords)
+    header = generate_header(Configuration) # Specifies Configuration for extract
+    cut_coords, Image = attach_header(Image, image_key, header, coords)
     data_coords = generate_coords(Configuration, Size, cut_coords)
     binary_message = generate_message(Configuration, data, data_coords)
-    image = attach_data(image, binary_message, data_coords)
-    image.save(f'{filepath}_result.png') # Fix saving/filepath
+    Image = attach_data(Image, Configuration, binary_message, data_coords)
+    save_image(filename, Image)
     
-# rename image to Image everywhere as correct variable name
-
-data_insert('Images/gate', "I like pineapples with toast", "hello world", indexs = [0,1,2,3,4])
+# Bug where 'all' method does not work. Perhaps coords area? Perhaps attach data issue... not sure
+data_insert('gate', "I like pineapples with toast", "hello world", method = 'all', indexs = [0,1,2,3,4,5,6,7])
