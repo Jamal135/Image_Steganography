@@ -98,16 +98,16 @@ def attach_header(Image: Image, key: int, header: str, coords: list):
 
 def build_object(key: int, method: str, noise: bool, colours: list, indexs: list):
     ''' Returns: Configuration object of steganographic storage settings. '''
-    if colours == None:
-        colours = [0,1,2] # Default to all colours
-    if indexs == None:
-        indexs = [6,7] # Default to two least significant bits
+    if colours is None:
+        colours = [0, 1, 2]
+    if indexs is None:
+        indexs = [6, 7]
     colour_list = ['red', 'green', 'blue']
-    index_list = ['1st', '2nd', '3rd', '4th', '5th', '6th', '7th']
-    class Configuration():
-        COLOURS = {colour_list[i]: i for i, _ in enumerate(colour_list) if i in colours}
-        INDEXS = {index_list[i]: i + 1 for i, _ in enumerate(index_list) if i + 1 in indexs}
-        VOLUME = len(colours) * len(indexs) if method == 'all' else len(indexs) 
+    index_list = ['1st', '2nd', '3rd', '4th', '5th', '6th', '7th', '8th']
+    class Configuration:
+        COLOURS = {colour_list[i]: i for i in colours}
+        INDEXS = {index_list[i]: i for i in indexs}
+        VOLUME = len(colours) * len(indexs) if method == 'all' else len(indexs)
         METHOD = method
         NOISE = noise
         KEY = key
@@ -118,9 +118,8 @@ def binary_conversion(data: str, method: str):
     ''' Returns: Data converted to or from binary. '''
     if method == 'binary':
         return ''.join([bin(byte)[2:].zfill(8) for byte in bytearray(data, 'utf-8')])
-    else:
-        byte_list = int(data, 2).to_bytes(len(data) // 8, byteorder = 'big')
-        return byte_list.decode('utf-8')
+    byte_list = int(data, 2).to_bytes(len(data) // 8, byteorder='big')
+    return byte_list.decode('utf-8')
 
 
 def generate_numbers(min_value: int, max_value: int, number_values: int):
@@ -155,8 +154,8 @@ def generate_coords(Configuration: object, Size: object, pixel_coords: list):
     data_coords = []
     for i, coordinate in enumerate(pixel_coords):
         for colour in colours[i] if method == 'random' else colours:
-            for index in indexs:
-                data_coords.append((coordinate[0], coordinate[1], colour, index))
+            data_coords.extend((coordinate[0], coordinate[1], colour, index) 
+                               for index in indexs)
     return shuffle(key, data_coords)
 
 
@@ -178,10 +177,8 @@ def attach_data(Image: Image, Configuration: object, binary_message: str, coords
 
 def save_image(filename: str, Image: Image, type: str = '.png'):
     ''' Returns: Saved image at location output. '''
-    if not filename.endswith(type):
-        filename = f'{filename}_result{type}'
-    else:
-        filename = f'{filename[:-4]}_result{type}'
+    filename = f'{filename[:-4]}_result{type}' if filename.endswith(type) \
+                else f'{filename}_result{type}'
     Image.save(f'Images/{filename}')
 
 
@@ -198,5 +195,5 @@ def data_insert(filename: str, key: str, data: str, method: str = 'random',
     Image = attach_data(Image, Configuration, binary_message, data_coords)
     save_image(filename, Image)
     
-# Bug where 'all' method does not work. Perhaps coords area? Perhaps attach data issue... not sure
-data_insert('gate', "I like pineapples with toast", "hello world", method = 'all', indexs = [0,1,2,3,4,5,6,7])
+# Bug where with multiple indexs per pixel only most recent is saved
+data_insert('gate', "I like pineapples with toast", "hello world", method = 'all', indexs = [0], colours=[0,1,2])
