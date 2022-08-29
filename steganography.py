@@ -244,8 +244,3 @@ def data_extract(filename: str, key: str):
     Configuration = build_object(image_key, method, colours, indexs)
     data_coords = generate_coords(Configuration, Size, cut_coords)
     return extract_message(Image, data_coords)
-
- 
-# Bug where with multiple indexs per pixel only most recent is saved
-data_insert('gate', 'I like pineapples with toast', 'hello world I am super secret data that wants to be found')
-print(data_extract('gate_result', 'I like pineapples with toast'))
