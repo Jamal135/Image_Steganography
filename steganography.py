@@ -85,17 +85,12 @@ def attach_header(Image: Image, key: int, header: str, coords: list):
     header_coords = coords[:length - 1]
     colours = random_sample(key, [0,1,2], length)
     colours = [item for sublist in colours for item in sublist]
-    pixels = [list(Image.getpixel((coords[point][0], coords[point][1])))
-              for point in range(length - 1)]
     for i, position in enumerate(header_coords):
-        pixel = Image.getpixel((position[0], position[1]))
+        pixel = list(Image.getpixel((position[0], position[1])))
         value = integer_conversion(pixel[colours[i]], 'binary')
         modified_value = integer_conversion(value[:-1] + header[i], 'integer')
-        pixels[colours[i]] = modified_value 
+        pixel[colours[i]] = modified_value 
         Image.putpixel((coords[i][0], coords[i][1]), tuple(pixel))
-    pixels = [tuple(list) for list in pixels] # Convert back to tuples
-    [Image.putpixel((coords[point][0], coords[point][1]), pixels[point])
-     for point in range(length - 1)]
     return coords[length:], Image    
 
 
@@ -204,6 +199,7 @@ def data_insert(filename: str, key: str, data: str, method: str = 'random',
     binary_message = generate_message(Configuration, data, data_coords)
     Image = attach_data(Image, Configuration, binary_message, data_coords)
     save_image(filename, Image)
+
 
 def data_extract(filename: str, key: str):
     ''' Returns: Data steganographically extracted from selected image. '''
