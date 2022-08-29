@@ -34,7 +34,7 @@ def load_image(filename: str, type: str = '.png'):
 
 def shuffle(key: int, data):
     ''' Returns: Data shuffled with key as seed. '''
-    seed(key)
+    seed(key) # Same result with same key and data
     return sample(data, len(data))
 
 
@@ -55,14 +55,14 @@ def generate_header(Configuration: object):
     colours = list(Configuration.COLOURS.values())
     indexs = list(Configuration.INDEXS.values())
     method = Configuration.METHOD
-    method_bool = "1" if method == "random" else "0"
-    colour_table = ["0", "0", "0"]
+    method_bool = '1' if method == 'random' else '0'
+    colour_table = ['0', '0', '0']
     for colour in colours:
-        colour_table[colour] = "1"
-    index_table = ["0", "0", "0", "0", "0", "0", "0", "0"]
+        colour_table[colour] = '1'
+    index_table = ['0', '0', '0', '0', '0', '0', '0', '0']
     for index in indexs:
-        index_table[index] = "1"
-    return method_bool + "".join(colour_table) + "".join(index_table)
+        index_table[index] = '1'
+    return method_bool + ''.join(colour_table) + ''.join(index_table)
 
 
 def random_sample(key: int, options: list, length: int, number_picked: int = 1):
@@ -81,8 +81,8 @@ def integer_conversion(data: int, method: str):
 
 def attach_header(Image: Image, key: int, header: str, coords: list):
     ''' Returns: Modified image with header data attached for extraction. '''
-    length = len(header) # Stored as random method any colour, smallest index
-    header_coords = coords[:length - 1]
+    length = 12 # Stored as random method any colour, smallest index
+    header_coords = coords[:length]
     colours = random_sample(key, [0,1,2], length)
     colours = [item for sublist in colours for item in sublist]
     for i, position in enumerate(header_coords):
@@ -94,7 +94,7 @@ def attach_header(Image: Image, key: int, header: str, coords: list):
     return coords[length:], Image    
 
 
-def build_object(key: int, method: str, noise: bool, colours: list, indexs: list):
+def build_object(key: int, method: str, colours: list, indexs: list, noise: bool = False):
     ''' Returns: Configuration object of steganographic storage settings. '''
     if colours is None:
         colours = [0, 1, 2]
@@ -123,7 +123,7 @@ def binary_conversion(data: str, method: str):
 def generate_numbers(min_value: int, max_value: int, number_values: int):
     ''' Returns: Variable length string of random numbers in range. '''
     seed(token_hex(64))
-    return "".join([str(randint(min_value, max_value)) for _ in range(number_values)])
+    return ''.join([str(randint(min_value, max_value)) for _ in range(number_values)])
 
 
 def generate_message(Configuration: object, data: str, coords: list):
@@ -134,7 +134,7 @@ def generate_message(Configuration: object, data: str, coords: list):
     data_size = len(data)
     size = end_key_size + data_size
     if size > capacity: # Test if message can fit inside the image
-        raise ValueError(f"Message size exceeded by {size - capacity} bits")
+        raise ValueError(f'Message size exceeded by {size - capacity} bits')
     noise = generate_numbers(0, 1, capacity - size) if Configuration.NOISE else ''
     end_key = integer_conversion(data_size, 'binary').zfill(end_key_size)
     return end_key + data + noise # Binary, end key specifies index of data end
@@ -180,11 +180,46 @@ def save_image(filename: str, Image: Image, type: str = '.png'):
 
 def extract_header(Image: Image, key: int, coords: list):
     ''' Returns: Header data extracted and unpacked. '''
-    pass
+    length = 12 # Header coded to 1 for true, 0 for false
+    header = []
+    header_coords = coords[:length]
+    colours = random_sample(key, [0,1,2], length)
+    colours = [item for sublist in colours for item in sublist]
+    for i, position in enumerate(header_coords):
+        pixel = list(Image.getpixel((position[0], position[1])))
+        value = integer_conversion(pixel[colours[i]], 'binary')
+        header.append(value[-1])
+    method = 'random' if header[0] == '1' else 'all'
+    colours = []
+    for i in range(3): # Check three colour indicators
+        if header[i + 1] == '1':
+            colours.append(i)
+    indexs = []
+    for i in range(8): # Check eight index indicators
+        if header[i + 4] == '1':
+            indexs.append(i)
+    return method, colours, indexs, coords[length:]
 
 
-def extract_message():
-    pass
+def extract_data(Image: Image, coords: list):
+    ''' Returns: All binary data extracted from given coordinates. '''
+    data = []
+    for position in coords:
+        pixel = list(Image.getpixel((position[0], position[1])))
+        value = list(integer_conversion(pixel[position[2]], 'binary'))
+        data.append(value[position[3]])
+    return str(''.join(data))
+
+
+def extract_message(Image: Image, coords: list):
+    ''' Returns: Data stored steganographically within the image. '''
+    capacity = len(coords)
+    end_key_size = len(integer_conversion(capacity, 'binary'))
+    end_key = extract_data(Image, coords[:end_key_size]) 
+    data_size = integer_conversion(end_key, 'integer')
+    coords = coords[end_key_size: data_size + end_key_size]
+    binary_message = extract_data(Image, coords)
+    return binary_conversion(binary_message, 'data')
 
 
 def data_insert(filename: str, key: str, data: str, method: str = 'random', 
@@ -192,7 +227,7 @@ def data_insert(filename: str, key: str, data: str, method: str = 'random',
     ''' Returns: Selected image with secret data steganographically attached. '''
     Image, Size = load_image(filename)
     coords, image_key = generate_context(key, Image, Size)
-    Configuration = build_object(image_key, method, noise, colours, indexs)
+    Configuration = build_object(image_key, method, colours, indexs, noise)
     header = generate_header(Configuration) # Specifies Configuration for extract
     cut_coords, Image = attach_header(Image, image_key, header, coords)
     data_coords = generate_coords(Configuration, Size, cut_coords)
@@ -205,10 +240,12 @@ def data_extract(filename: str, key: str):
     ''' Returns: Data steganographically extracted from selected image. '''
     Image, Size = load_image(filename)
     coords, image_key = generate_context(key, Image, Size)
-    method, noise, colours, indexs, cut_coords = extract_header(Image, key, coords)
-    Configuration = build_object(image_key, method, noise, colours, indexs)
+    method, colours, indexs, cut_coords = extract_header(Image, image_key, coords)
+    Configuration = build_object(image_key, method, colours, indexs)
     data_coords = generate_coords(Configuration, Size, cut_coords)
-    binary_message = extract_message()
-    
+    return extract_message(Image, data_coords)
+
+ 
 # Bug where with multiple indexs per pixel only most recent is saved
-data_insert('gate', "I like pineapples with toast", "hello world", method = 'all', indexs = [6,7], colours=[1])
+data_insert('gate', 'I like pineapples with toast', 'hello world I am super secret data that wants to be found')
+print(data_extract('gate_result', 'I like pineapples with toast'))
