@@ -81,7 +81,7 @@ def integer_conversion(data: int, method: str):
 
 def attach_header(Image: Image, key: int, header: str, coords: list):
     ''' Returns: Modified image with header data attached for extraction. '''
-    length = 12 # Stored as random method any colour, smallest index
+    length = 12 # Stored as random method, any colour, smallest index
     header_coords = coords[:length]
     colours = random_sample(key, [0,1,2], length)
     colours = [item for sublist in colours for item in sublist]
