@@ -8,6 +8,13 @@ from secrets import token_hex
 from random import seed, sample, randint
 
 
+def verify_string(items: list):
+    ''' Purpose: Check all items in list are valid strings. '''
+    for item in items:
+        if not isinstance(item, str):
+            raise ValueError(f'Variable is invalid string: {item}')
+
+
 def decimal_encoding(text: str):
     ''' Returns: Text converted to base10 integer. '''
     try:
@@ -52,8 +59,8 @@ def generate_context(key: int, Image: Image, Size: object, key_pixels: int = 16)
 
 def generate_header(Configuration: object):
     ''' Returns: Built binary header data specifying settings. '''
-    colours = list(Configuration.COLOURS.values())
-    indexs = list(Configuration.INDEXS.values())
+    colours = Configuration.COLOURS
+    indexs = Configuration.INDEXS
     method = Configuration.METHOD
     method_bool = '1' if method == 'random' else '0'
     colour_table = ['0', '0', '0']
@@ -94,18 +101,39 @@ def attach_header(Image: Image, key: int, header: str, coords: list):
     return coords[length:], Image    
 
 
+def list_verification(items: list, allowed: list):
+    ''' Returns: True or False with respect to if tests pass or fail. '''
+    try:
+        if any(item not in allowed for item in items):
+            return False
+        return len(set(items)) == len(items)
+    except Exception:
+        return False
+
+
+def verify(method: str, colours: list, indexs: list, noise: bool):
+    ''' Purpose: Verifies all entered arguments are acceptable. '''
+    if method not in ['all', 'random']:
+        raise ValueError(f'Invalid method string argument: {method}')
+    if not list_verification(indexs, [0,1,2,3,4,5,6,7]):
+        raise ValueError(f'Invalid indexs list argument: {indexs}')
+    if not list_verification(colours, [0,1,2]):
+        raise ValueError(f'Invalid indexs list argument: {colours}')
+    if noise not in [True, False]:
+        raise ValueError(f'Invalid boolean noise argument: {noise}')
+
+
 def build_object(key: int, method: str, colours: list, indexs: list, noise: bool = False):
     ''' Returns: Configuration object of steganographic storage settings. '''
     if colours is None:
         colours = [0, 1, 2]
     if indexs is None:
         indexs = [6, 7]
-    colour_list = ['red', 'green', 'blue']
-    index_list = ['1st', '2nd', '3rd', '4th', '5th', '6th', '7th', '8th']
+    verify(method, colours, indexs, noise)
     class Configuration:
-        COLOURS = {colour_list[i]: i for i in colours}
-        INDEXS = {index_list[i]: i for i in indexs}
         VOLUME = len(colours) * len(indexs) if method == 'all' else len(indexs)
+        COLOURS = colours
+        INDEXS = indexs
         METHOD = method
         NOISE = noise
         KEY = key
@@ -142,8 +170,8 @@ def generate_message(Configuration: object, data: str, coords: list):
 
 def generate_coords(Configuration: object, Size: object, pixel_coords: list):
     ''' Returns: Shuffled data location tuples (Width, Height, Colour, Index). '''
-    colours = list(Configuration.COLOURS.values())
-    indexs = list(Configuration.INDEXS.values())
+    colours = Configuration.COLOURS
+    indexs = Configuration.INDEXS
     method = Configuration.METHOD
     key = Configuration.KEY
     length = Size.PIXELS
@@ -181,10 +209,10 @@ def save_image(filename: str, Image: Image, type: str = '.png'):
 def extract_header(Image: Image, key: int, coords: list):
     ''' Returns: Header data extracted and unpacked. '''
     length = 12 # Header coded to 1 for true, 0 for false
-    header = []
     header_coords = coords[:length]
     colours = random_sample(key, [0,1,2], length)
     colours = [item for sublist in colours for item in sublist]
+    header = []
     for i, position in enumerate(header_coords):
         pixel = list(Image.getpixel((position[0], position[1])))
         value = integer_conversion(pixel[colours[i]], 'binary')
@@ -209,16 +237,20 @@ def extract_message(Image: Image, coords: list):
     ''' Returns: Data stored steganographically within the image. '''
     capacity = len(coords)
     end_key_size = len(integer_conversion(capacity, 'binary'))
-    end_key = extract_data(Image, coords[:end_key_size]) 
-    data_size = integer_conversion(end_key, 'integer')
-    coords = coords[end_key_size: data_size + end_key_size]
-    binary_message = extract_data(Image, coords)
-    return binary_conversion(binary_message, 'data')
+    try:
+        end_key = extract_data(Image, coords[:end_key_size]) 
+        data_size = integer_conversion(end_key, 'integer')
+        coords = coords[end_key_size: data_size + end_key_size]
+        binary_message = extract_data(Image, coords)
+        return binary_conversion(binary_message, 'data')
+    except:
+        raise ValueError('Invalid data extracted')
 
 
-def data_insert(filename: str, key: str, data: str, method: str = 'random', 
+def data_insert(filename: str, data: str, key: str = '999', method: str = 'random', 
                 colours: list = None, indexs: list = None, noise: bool = False):
     ''' Returns: Selected image with secret data steganographically attached. '''
+    verify_string([filename, data, key])
     Image, Size = load_image(filename)
     coords, image_key = generate_context(key, Image, Size)
     Configuration = build_object(image_key, method, colours, indexs, noise)
@@ -230,8 +262,9 @@ def data_insert(filename: str, key: str, data: str, method: str = 'random',
     save_image(filename, Image)
 
 
-def data_extract(filename: str, key: str):
+def data_extract(filename: str, key: str = '999'):
     ''' Returns: Data steganographically extracted from selected image. '''
+    verify_string([filename, key])
     Image, Size = load_image(filename)
     coords, image_key = generate_context(key, Image, Size)
     method, colours, indexs, cut_coords = extract_header(Image, image_key, coords)
