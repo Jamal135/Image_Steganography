@@ -82,14 +82,17 @@ def integer_conversion(data: int, method: str):
 def attach_header(Image: Image, key: int, header: str, coords: list):
     ''' Returns: Modified image with header data attached for extraction. '''
     length = len(header) # Stored as random method any colour, smallest index
+    header_coords = coords[:length - 1]
     colours = random_sample(key, [0,1,2], length)
     colours = [item for sublist in colours for item in sublist]
     pixels = [list(Image.getpixel((coords[point][0], coords[point][1])))
               for point in range(length - 1)]
-    for i, pixel in enumerate(pixels):
+    for i, position in enumerate(header_coords):
+        pixel = Image.getpixel((position[0], position[1]))
         value = integer_conversion(pixel[colours[i]], 'binary')
         modified_value = integer_conversion(value[:-1] + header[i], 'integer')
-        pixels[i][colours[i]] = modified_value 
+        pixels[colours[i]] = modified_value 
+        Image.putpixel((coords[i][0], coords[i][1]), tuple(pixel))
     pixels = [tuple(list) for list in pixels] # Convert back to tuples
     [Image.putpixel((coords[point][0], coords[point][1]), pixels[point])
      for point in range(length - 1)]
@@ -163,15 +166,13 @@ def attach_data(Image: Image, Configuration: object, binary_message: str, coords
     ''' Returns: Image with all required pixels steganographically modified. '''
     if not Configuration.NOISE: # Optimise if not modifying every pixel
         coords = coords[:len(binary_message)]
-    pixels = [list(Image.getpixel((location[0], location[1]))) for location in coords]
-    for i, point in enumerate(coords):
-        value = list(integer_conversion(pixels[i][point[2]], 'binary'))
-        value[point[3]] = binary_message[i]
+    for i, position in enumerate(coords):
+        pixel = list(Image.getpixel((position[0], position[1])))
+        value = list(integer_conversion(pixel[position[2]], 'binary'))
+        value[position[3]] = binary_message[i]
         modified_value = integer_conversion(''.join(value), 'integer')
-        pixels[i][point[2]] = modified_value
-    pixels = [tuple(list) for list in pixels] # Convert back to tuples
-    [Image.putpixel((coords[i][0], coords[i][1]), point)
-     for i, point in enumerate(pixels)]
+        pixel[position[2]] = modified_value
+        Image.putpixel((coords[i][0], coords[i][1]), tuple(pixel))
     return Image
 
 
@@ -182,8 +183,17 @@ def save_image(filename: str, Image: Image, type: str = '.png'):
     Image.save(f'Images/{filename}')
 
 
+def extract_header(Image: Image, key: int, coords: list):
+    ''' Returns: Header data extracted and unpacked. '''
+    pass
+
+
+def extract_message():
+    pass
+
+
 def data_insert(filename: str, key: str, data: str, method: str = 'random', 
-                colours: list = None, indexs: list = None, noise: bool = True):
+                colours: list = None, indexs: list = None, noise: bool = False):
     ''' Returns: Selected image with secret data steganographically attached. '''
     Image, Size = load_image(filename)
     coords, image_key = generate_context(key, Image, Size)
@@ -194,6 +204,15 @@ def data_insert(filename: str, key: str, data: str, method: str = 'random',
     binary_message = generate_message(Configuration, data, data_coords)
     Image = attach_data(Image, Configuration, binary_message, data_coords)
     save_image(filename, Image)
+
+def data_extract(filename: str, key: str):
+    ''' Returns: Data steganographically extracted from selected image. '''
+    Image, Size = load_image(filename)
+    coords, image_key = generate_context(key, Image, Size)
+    method, noise, colours, indexs, cut_coords = extract_header(Image, key, coords)
+    Configuration = build_object(image_key, method, noise, colours, indexs)
+    data_coords = generate_coords(Configuration, Size, cut_coords)
+    binary_message = extract_message()
     
 # Bug where with multiple indexs per pixel only most recent is saved
-data_insert('gate', "I like pineapples with toast", "hello world", method = 'all', indexs = [0], colours=[0,1,2])
+data_insert('gate', "I like pineapples with toast", "hello world", method = 'all', indexs = [6,7], colours=[1])
