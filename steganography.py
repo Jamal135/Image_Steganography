@@ -190,14 +190,8 @@ def extract_header(Image: Image, key: int, coords: list):
         value = integer_conversion(pixel[colours[i]], 'binary')
         header.append(value[-1])
     method = 'random' if header[0] == '1' else 'all'
-    colours = []
-    for i in range(3): # Check three colour indicators
-        if header[i + 1] == '1':
-            colours.append(i)
-    indexs = []
-    for i in range(8): # Check eight index indicators
-        if header[i + 4] == '1':
-            indexs.append(i)
+    colours = [i for i in range(3) if header[i + 1] == '1']
+    indexs = [i for i in range(8) if header[i + 4] == '1']
     return method, colours, indexs, coords[length:]
 
 
@@ -208,7 +202,7 @@ def extract_data(Image: Image, coords: list):
         pixel = list(Image.getpixel((position[0], position[1])))
         value = list(integer_conversion(pixel[position[2]], 'binary'))
         data.append(value[position[3]])
-    return str(''.join(data))
+    return ''.join(data)
 
 
 def extract_message(Image: Image, coords: list):
