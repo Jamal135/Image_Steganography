@@ -59,17 +59,18 @@ def generate_context(key: int, Image: Image, Size: object, key_pixels: int = 16)
 
 def generate_header(Configuration: object):
     ''' Returns: Built binary header data specifying settings. '''
-    colours = Configuration.COLOURS
-    indexs = Configuration.INDEXS
-    method = Configuration.METHOD
-    method_bool = '1' if method == 'random' else '0'
+    method_bin = '1' if Configuration.METHOD == 'random' else '0'
+    stored_bin = '1' if Configuration.STORED == 'data' else '0'
+    encrypt_bin = '1' if Configuration.ENCRYPT == True else '0'
     colour_table = ['0', '0', '0']
-    for colour in colours:
+    for colour in Configuration.COLOURS:
         colour_table[colour] = '1'
+    colour_bin = ''.join(colour_table)
     index_table = ['0', '0', '0', '0', '0', '0', '0', '0']
-    for index in indexs:
+    for index in Configuration.INDEXS:
         index_table[index] = '1'
-    return method_bool + ''.join(colour_table) + ''.join(index_table)
+    index_bin = ''.join(index_table)
+    return method_bin + stored_bin + encrypt_bin + colour_bin + index_bin
 
 
 def random_sample(key: int, options: list, length: int, number_picked: int = 1):
@@ -101,38 +102,46 @@ def attach_header(Image: Image, key: int, header: str, coords: list):
     return coords[length:], Image    
 
 
-def list_verification(items: list, allowed: list):
-    ''' Returns: True or False with respect to if tests pass or fail. '''
+def list_verification(variable: str, items: list, allowed: list):
+    ''' Purpose: Tests that list variable is valid. '''
     try:
         if any(item not in allowed for item in items):
-            return False
+            raise ValueError(f'Invalid {variable} list argument: {items}')
         return len(set(items)) == len(items)
     except Exception:
-        return False
+        raise ValueError(f'Invalid {variable} list argument: {items}')
 
 
-def verify(method: str, colours: list, indexs: list, noise: bool):
-    ''' Purpose: Verifies all entered arguments are acceptable. '''
-    if method not in ['all', 'random']:
-        raise ValueError(f'Invalid method string argument: {method}')
-    if not list_verification(indexs, [0,1,2,3,4,5,6,7]):
-        raise ValueError(f'Invalid indexs list argument: {indexs}')
-    if not list_verification(colours, [0,1,2]):
-        raise ValueError(f'Invalid indexs list argument: {colours}')
-    if noise not in [True, False]:
-        raise ValueError(f'Invalid boolean noise argument: {noise}')
+def bool_verification(variable: str, value: bool):
+    ''' Purpose: Tests that boolean variable is valid. '''
+    if value not in [True, False]:
+        raise ValueError(f'Invalid boolean {variable} argument: {value}')
 
 
-def build_object(key: int, method: str, colours: list, indexs: list, noise: bool = False):
+def str_verification(variable: str, value: str, allowed: list):
+    ''' Purpose: Tests that string argument variable is valid. '''
+    if variable not in allowed:
+        raise ValueError(f'Invalid string {variable} argument: {value}')
+
+
+def build_object(key: int, method: str, stored: str, colours: list, 
+                 indexs: list, noise: bool, encrypt: bool):
     ''' Returns: Configuration object of steganographic storage settings. '''
     if colours is None:
         colours = [0, 1, 2]
     if indexs is None:
         indexs = [6, 7]
-    verify(method, colours, indexs, noise)
+    str_verification('method', method, ['random', 'all'])
+    str_verification('stored', stored, ['data', 'file'])
+    list_verification('indexs', indexs, [0,1,2,3,4,5,6,7])
+    list_verification('colours', colours, [0,1,2])
+    bool_verification('encrypt', encrypt)
+    bool_verification('noise', noise)
     class Configuration:
         VOLUME = len(colours) * len(indexs) if method == 'all' else len(indexs)
         COLOURS = colours
+        ENCRYPT = encrypt
+        STORED = stored
         INDEXS = indexs
         METHOD = method
         NOISE = noise
@@ -148,6 +157,12 @@ def binary_conversion(data: str, method: str):
     return byte_list.decode('utf-8')
 
 
+def binary_file(data: str):
+    ''' Returns: . '''
+    if not data.endswith('.7z'):
+        pass
+
+
 def generate_numbers(min_value: int, max_value: int, number_values: int):
     ''' Returns: Variable length string of random numbers in range. '''
     seed(token_hex(64))
@@ -155,9 +170,12 @@ def generate_numbers(min_value: int, max_value: int, number_values: int):
 
 
 def generate_message(Configuration: object, data: str, coords: list):
-    ''' Returns: '''
+    ''' Returns: Generated binary data to be attached to image. '''
     capacity = len(coords)
-    data = binary_conversion(data, 'binary')
+    if Configuration.STORED == 'data':
+        data = binary_conversion(data, 'binary')
+    else:
+        data = binary_file(data)
     end_key_size = len(integer_conversion(capacity, 'binary'))
     data_size = len(data)
     size = end_key_size + data_size
@@ -247,13 +265,14 @@ def extract_message(Image: Image, coords: list):
         raise ValueError('Invalid data extracted')
 
 
-def data_insert(filename: str, data: str, key: str = '999', method: str = 'random', 
-                colours: list = None, indexs: list = None, noise: bool = False):
+def data_insert(filename: str, data: str, key: str = '999', method: str = 'random',
+                stored: str = 'data', colours: list = None, indexs: list = None, 
+                noise: bool = False, encrypt: bool = False):
     ''' Returns: Selected image with secret data steganographically attached. '''
     verify_string([filename, data, key])
     Image, Size = load_image(filename)
     coords, image_key = generate_context(key, Image, Size)
-    Configuration = build_object(image_key, method, colours, indexs, noise)
+    Configuration = build_object(image_key, method, stored, colours, indexs, noise, encrypt)
     header = generate_header(Configuration) # Specifies Configuration for extract
     cut_coords, Image = attach_header(Image, image_key, header, coords)
     data_coords = generate_coords(Configuration, Size, cut_coords)
