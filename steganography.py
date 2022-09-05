@@ -57,17 +57,17 @@ def generate_context(key: int, Image: Image, Size: object, key_pixels: int = 16)
     return coords, key
 
 
-def generate_header(Configuration: object):
+def generate_header(Config: object):
     ''' Returns: Built binary header data specifying settings. '''
-    method_bin = '1' if Configuration.METHOD == 'random' else '0'
-    stored_bin = '1' if Configuration.STORED == 'data' else '0'
-    encrypt_bin = '1' if Configuration.ENCRYPT == True else '0'
+    method_bin = '1' if Config.METHOD == 'random' else '0'
+    stored_bin = '1' if Config.STORED == 'data' else '0'
+    encrypt_bin = '1' if Config.ENCRYPT == True else '0'
     colour_table = ['0', '0', '0']
-    for colour in Configuration.COLOURS:
+    for colour in Config.COLOURS:
         colour_table[colour] = '1'
     colour_bin = ''.join(colour_table)
     index_table = ['0', '0', '0', '0', '0', '0', '0', '0']
-    for index in Configuration.INDEXS:
+    for index in Config.INDEXS:
         index_table[index] = '1'
     index_bin = ''.join(index_table)
     return method_bin + stored_bin + encrypt_bin + colour_bin + index_bin
@@ -108,8 +108,8 @@ def list_verification(variable: str, items: list, allowed: list):
         if any(item not in allowed for item in items):
             raise ValueError(f'Invalid {variable} list argument: {items}')
         return len(set(items)) == len(items)
-    except Exception:
-        raise ValueError(f'Invalid {variable} list argument: {items}')
+    except Exception as e:
+        raise ValueError(f'Invalid {variable} list argument: {items}') from e
 
 
 def bool_verification(variable: str, value: bool):
@@ -137,7 +137,7 @@ def build_object(key: int, method: str, stored: str, colours: list,
     list_verification('colours', colours, [0,1,2])
     bool_verification('encrypt', encrypt)
     bool_verification('noise', noise)
-    class Configuration:
+    class Config:
         VOLUME = len(colours) * len(indexs) if method == 'all' else len(indexs)
         COLOURS = colours
         ENCRYPT = encrypt
@@ -146,7 +146,7 @@ def build_object(key: int, method: str, stored: str, colours: list,
         METHOD = method
         NOISE = noise
         KEY = key
-    return Configuration
+    return Config
 
 
 def binary_conversion(data: str, method: str):
@@ -169,10 +169,10 @@ def generate_numbers(min_value: int, max_value: int, number_values: int):
     return ''.join([str(randint(min_value, max_value)) for _ in range(number_values)])
 
 
-def generate_message(Configuration: object, data: str, coords: list):
+def generate_message(Config: object, data: str, coords: list):
     ''' Returns: Generated binary data to be attached to image. '''
     capacity = len(coords)
-    if Configuration.STORED == 'data':
+    if Config.STORED == 'data':
         data = binary_conversion(data, 'binary')
     else:
         data = binary_file(data)
@@ -181,31 +181,26 @@ def generate_message(Configuration: object, data: str, coords: list):
     size = end_key_size + data_size
     if size > capacity: # Test if message can fit inside the image
         raise ValueError(f'Message size exceeded by {size - capacity} bits')
-    noise = generate_numbers(0, 1, capacity - size) if Configuration.NOISE else ''
+    noise = generate_numbers(0, 1, capacity - size) if Config.NOISE else ''
     end_key = integer_conversion(data_size, 'binary').zfill(end_key_size)
     return end_key + data + noise # Binary, end key specifies index of data end
 
 
-def generate_coords(Configuration: object, Size: object, pixel_coords: list):
+def generate_coords(Config: object, Size: object, pixel_coords: list):
     ''' Returns: Shuffled data location tuples (Width, Height, Colour, Index). '''
-    colours = Configuration.COLOURS
-    indexs = Configuration.INDEXS
-    method = Configuration.METHOD
-    key = Configuration.KEY
-    length = Size.PIXELS
-    if method == 'random': # If random need to pick random colour option per pixel
-        colours = random_sample(key, colours, length)
+    if Config.METHOD == 'random': # If random need to pick random colour option per pixel
+        colours = random_sample(Config.KEY, Config.COLOURS, Size.PIXELS)
     data_coords = []
     for i, coordinate in enumerate(pixel_coords):
-        for colour in colours[i] if method == 'random' else colours:
+        for colour in colours[i] if Config.METHOD == 'random' else Config.COLOURS:
             data_coords.extend((coordinate[0], coordinate[1], colour, index) 
-                               for index in indexs)
-    return shuffle(key, data_coords)
+                               for index in Config.INDEXS)
+    return shuffle(Config.KEY, data_coords)
 
 
-def attach_data(Image: Image, Configuration: object, binary_message: str, coords: list):
+def attach_data(Image: Image, Config: object, binary_message: str, coords: list):
     ''' Returns: Image with all required pixels steganographically modified. '''
-    if not Configuration.NOISE: # Optimise if not modifying every pixel
+    if not Config.NOISE: # Optimise if not modifying every pixel
         coords = coords[:len(binary_message)]
     for i, position in enumerate(coords):
         pixel = list(Image.getpixel((position[0], position[1])))
@@ -261,8 +256,8 @@ def extract_message(Image: Image, coords: list):
         coords = coords[end_key_size: data_size + end_key_size]
         binary_message = extract_data(Image, coords)
         return binary_conversion(binary_message, 'data')
-    except:
-        raise ValueError('Invalid data extracted')
+    except Exception as e:
+        raise ValueError('Invalid data extracted') from e
 
 
 def data_insert(filename: str, data: str, key: str = '999', method: str = 'random',
@@ -272,12 +267,12 @@ def data_insert(filename: str, data: str, key: str = '999', method: str = 'rando
     verify_string([filename, data, key])
     Image, Size = load_image(filename)
     coords, image_key = generate_context(key, Image, Size)
-    Configuration = build_object(image_key, method, stored, colours, indexs, noise, encrypt)
-    header = generate_header(Configuration) # Specifies Configuration for extract
+    Config = build_object(image_key, method, stored, colours, indexs, noise, encrypt)
+    header = generate_header(Config) # Specifies Configuration for extract
     cut_coords, Image = attach_header(Image, image_key, header, coords)
-    data_coords = generate_coords(Configuration, Size, cut_coords)
-    binary_message = generate_message(Configuration, data, data_coords)
-    Image = attach_data(Image, Configuration, binary_message, data_coords)
+    data_coords = generate_coords(Config, Size, cut_coords)
+    binary_message = generate_message(Config, data, data_coords)
+    Image = attach_data(Image, Config, binary_message, data_coords)
     save_image(filename, Image)
 
 
@@ -287,6 +282,6 @@ def data_extract(filename: str, key: str = '999'):
     Image, Size = load_image(filename)
     coords, image_key = generate_context(key, Image, Size)
     method, colours, indexs, cut_coords = extract_header(Image, image_key, coords)
-    Configuration = build_object(image_key, method, colours, indexs)
-    data_coords = generate_coords(Configuration, Size, cut_coords)
+    Config = build_object(image_key, method, colours, indexs)
+    data_coords = generate_coords(Config, Size, cut_coords)
     return extract_message(Image, data_coords)
