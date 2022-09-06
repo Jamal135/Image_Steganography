@@ -120,7 +120,7 @@ def bool_verification(variable: str, value: bool):
 
 def str_verification(variable: str, value: str, allowed: list):
     ''' Purpose: Tests that string argument variable is valid. '''
-    if variable not in allowed:
+    if value not in allowed:
         raise ValueError(f'Invalid string {variable} argument: {value}')
 
 
@@ -189,7 +189,10 @@ def generate_message(Config: object, data: str, coords: list):
 def generate_coords(Config: object, Size: object, pixel_coords: list):
     ''' Returns: Shuffled data location tuples (Width, Height, Colour, Index). '''
     if Config.METHOD == 'random': # If random need to pick random colour option per pixel
-        colours = random_sample(Config.KEY, Config.COLOURS, Size.PIXELS)
+        if len(Config.COLOURS) == 1: # Don't random sample if only one colour option
+            colours = [Config.COLOURS] * Size.PIXELS
+        else:
+            colours = random_sample(Config.KEY, Config.COLOURS, Size.PIXELS)
     data_coords = []
     for i, coordinate in enumerate(pixel_coords):
         for colour in colours[i] if Config.METHOD == 'random' else Config.COLOURS:
@@ -285,3 +288,5 @@ def data_extract(filename: str, key: str = '999'):
     Config = build_object(image_key, method, colours, indexs)
     data_coords = generate_coords(Config, Size, cut_coords)
     return extract_message(Image, data_coords)
+
+data_insert('gate', 'testing hello world', colours=[0])
