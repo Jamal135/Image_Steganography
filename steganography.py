@@ -159,8 +159,8 @@ def binary_conversion(data: str, method: str):
 
 def binary_file(data: str):
     ''' Returns: . '''
-    if not data.endswith('.7z'):
-        pass
+    with open(data, 'rb') as file:
+        print(file.read())
 
 
 def generate_numbers(min_value: int, max_value: int, number_values: int):
