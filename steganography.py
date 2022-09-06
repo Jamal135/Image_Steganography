@@ -89,9 +89,9 @@ def integer_conversion(data: int, method: str):
 
 def attach_header(Image: Image, key: int, header: str, coords: list):
     ''' Returns: Modified image with header data attached for extraction. '''
-    length = 12 # Stored as random method, any colour, smallest index
-    header_coords = coords[:length]
-    colours = random_sample(key, [0,1,2], length)
+    LENGTH = 14 # Stored as random method, any colour, smallest index
+    header_coords = coords[:LENGTH]
+    colours = random_sample(key, [0,1,2], LENGTH)
     colours = [item for sublist in colours for item in sublist]
     for i, position in enumerate(header_coords):
         pixel = list(Image.getpixel((position[0], position[1])))
@@ -99,7 +99,7 @@ def attach_header(Image: Image, key: int, header: str, coords: list):
         modified_value = integer_conversion(value[:-1] + header[i], 'integer')
         pixel[colours[i]] = modified_value 
         Image.putpixel((coords[i][0], coords[i][1]), tuple(pixel))
-    return coords[length:], Image    
+    return coords[LENGTH:], Image    
 
 
 def list_verification(variable: str, items: list, allowed: list):
@@ -124,8 +124,8 @@ def str_verification(variable: str, value: str, allowed: list):
         raise ValueError(f'Invalid string {variable} argument: {value}')
 
 
-def build_object(key: int, method: str, stored: str, colours: list, 
-                 indexs: list, noise: bool, encrypt: bool):
+def build_object(key: int, method: str, stored: str, encrypt: bool, 
+                 colours: list, indexs: list, noise: bool = False):
     ''' Returns: Configuration object of steganographic storage settings. '''
     if colours is None:
         colours = [0, 1, 2]
@@ -224,9 +224,9 @@ def save_image(filename: str, Image: Image, type: str = '.png'):
 
 def extract_header(Image: Image, key: int, coords: list):
     ''' Returns: Header data extracted and unpacked. '''
-    length = 12 # Header coded to 1 for true, 0 for false
-    header_coords = coords[:length]
-    colours = random_sample(key, [0,1,2], length)
+    LENGTH = 14 # Header coded to 1 for true, 0 for false
+    header_coords = coords[:LENGTH]
+    colours = random_sample(key, [0,1,2], LENGTH)
     colours = [item for sublist in colours for item in sublist]
     header = []
     for i, position in enumerate(header_coords):
@@ -234,9 +234,11 @@ def extract_header(Image: Image, key: int, coords: list):
         value = integer_conversion(pixel[colours[i]], 'binary')
         header.append(value[-1])
     method = 'random' if header[0] == '1' else 'all'
-    colours = [i for i in range(3) if header[i + 1] == '1']
-    indexs = [i for i in range(8) if header[i + 4] == '1']
-    return method, colours, indexs, coords[length:]
+    stored = 'data' if header[1] == '1' else 'file'
+    encrypt = header[2] == '1'
+    colours = [i for i in range(3) if header[i + 3] == '1']
+    indexs = [i for i in range(8) if header[i + 6] == '1']
+    return [method, stored, encrypt, colours, indexs], coords[LENGTH:]
 
 
 def extract_data(Image: Image, coords: list):
@@ -270,7 +272,7 @@ def data_insert(filename: str, data: str, key: str = '999', method: str = 'rando
     verify_string([filename, data, key])
     Image, Size = load_image(filename)
     coords, image_key = generate_context(key, Image, Size)
-    Config = build_object(image_key, method, stored, colours, indexs, noise, encrypt)
+    Config = build_object(image_key, method, stored, encrypt, colours, indexs, noise)
     header = generate_header(Config) # Specifies Configuration for extract
     cut_coords, Image = attach_header(Image, image_key, header, coords)
     data_coords = generate_coords(Config, Size, cut_coords)
@@ -284,9 +286,7 @@ def data_extract(filename: str, key: str = '999'):
     verify_string([filename, key])
     Image, Size = load_image(filename)
     coords, image_key = generate_context(key, Image, Size)
-    method, colours, indexs, cut_coords = extract_header(Image, image_key, coords)
-    Config = build_object(image_key, method, colours, indexs)
+    setup, cut_coords = extract_header(Image, image_key, coords)
+    Config = build_object(image_key, setup[0], setup[1], setup[2], setup[3], setup[4])
     data_coords = generate_coords(Config, Size, cut_coords)
     return extract_message(Image, data_coords)
-
-data_insert('gate', 'testing hello world', colours=[0])
