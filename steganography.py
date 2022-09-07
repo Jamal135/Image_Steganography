@@ -2,9 +2,11 @@
 
 
 from PIL import Image
+from os import getenv
 from functools import reduce
 from itertools import product
 from secrets import token_hex
+from dotenv import load_dotenv
 from os.path import exists, splitext
 from random import seed, sample, randint
 
@@ -14,14 +16,6 @@ def verify_string(items: list):
     for item in items:
         if not isinstance(item, str):
             raise ValueError(f'Variable is invalid string: {item}')
-
-
-def decimal_encoding(text: str):
-    ''' Returns: Text converted to base10 integer. '''
-    try:
-        return int(reduce(lambda a, b: a * 256 + b, map(ord, text), 0))
-    except Exception as e:
-        raise ValueError(f'Failed to encode: {text}') from e
 
 
 def load_image(filename: str, type: str = '.png'):
@@ -40,14 +34,34 @@ def load_image(filename: str, type: str = '.png'):
     return image, Size
 
 
+def env_extract():
+    ''' Returns: Extracted environment key else default key. '''
+    if not exists('.env'): # Use default unless custom instance provided
+        with open('.env', 'w') as file:
+            file.write('ENVIRONMENTKEY=122stegodefault2923283283238232')
+    load_dotenv()
+    return getenv('ENVIRONMENTKEY')
+
+
 def shuffle(key: int, data):
     ''' Returns: Data shuffled with key as seed. '''
     seed(key) # Same result with same key and data
     return sample(data, len(data))
 
 
+def decimal_encoding(text: str):
+    ''' Returns: Text converted to base10 integer. '''
+    try:
+        return int(reduce(lambda a, b: a * 256 + b, map(ord, text), 0))
+    except Exception as e:
+        raise ValueError(f'Failed to encode: {text}') from e
+
+
 def generate_context(key: int, Image: Image, Size: object, key_pixels: int = 16):
     ''' Returns: List of tuple coordinates in image and image specific key. '''
+    coords = [*product(range(Size.WIDTH), range(Size.HEIGHT))]
+    environment_key = decimal_encoding(env_extract())
+    coords = shuffle(environment_key, coords)
     key = decimal_encoding(key)
     key *= (Size.PIXELS * 99) # Adjust key by image size
     coords = shuffle(key, [*product(range(Size.WIDTH), range(Size.HEIGHT))])
@@ -229,10 +243,10 @@ def uniquify(file: str):
     if not exists(file):
         return file
     filename, extension = splitext(file)
-    counter = 1
+    count = 1
     while exists(file):
-        file = f'{filename}_{str(counter)}{extension}'
-        counter += 1
+        file = f'{filename}_{str(count)}{extension}'
+        count += 1
     return file
 
 
