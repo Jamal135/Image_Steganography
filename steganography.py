@@ -5,6 +5,7 @@ from PIL import Image
 from functools import reduce
 from itertools import product
 from secrets import token_hex
+from os.path import exists, splitext
 from random import seed, sample, randint
 
 
@@ -24,13 +25,13 @@ def decimal_encoding(text: str):
 
 
 def load_image(filename: str, type: str = '.png'):
-    ''' Returns: Image object and Enum of WIDTH and HEIGHT. '''
+    ''' Returns: Image object and class of width, height, and size. '''
     if not filename.endswith(type): # Only support PNG
         filename += type
     try:
-        image = Image.open(f'Images/{filename}')
+        image = Image.open(f'Files/{filename}')
     except Exception as e:
-        raise ValueError(f'No .PNG at Images/{filename}') from e
+        raise ValueError(f'No .png at Files/{filename}') from e
     size = image.size
     class Size():
         WIDTH = size[0]
@@ -149,18 +150,30 @@ def build_object(key: int, method: str, stored: str, encrypt: bool,
     return Config
 
 
-def binary_conversion(data: str, method: str):
-    ''' Returns: Data converted to or from binary. '''
-    if method == 'binary':
-        return ''.join([bin(byte)[2:].zfill(8) for byte in bytearray(data, 'utf-8')])
-    byte_list = int(data, 2).to_bytes(len(data) // 8, byteorder='big')
-    return byte_list.decode('utf-8')
+def binary_encode(data: str, Config: object):
+    ''' Returns: File at data or string of data convert to binary. '''
+    if Config.STORED == 'file':
+        file_details = data.encode('utf-8') + b'..'
+        with open(f'Files/{data}', 'rb') as file:
+            data_bytes = file_details + file.read()
+    else:
+        data_bytes = data.encode('utf-8')
+    return ''.join(f'{byte:08b}' for byte in data_bytes)
 
 
-def binary_file(data: str):
-    ''' Returns: . '''
-    with open(data, 'rb') as file:
-        print(file.read())
+def binary_decode(data: str, Config: object, overwrite: bool):
+    ''' Returns: Binary string converted to file or string of data. '''
+    data_bytes = int(data, 2).to_bytes((len(data) + 7) // 8, byteorder='big')
+    if Config.STORED != 'file':
+        print(data_bytes.decode('utf-8')) # Print to terminal
+    file_bytes, data_bytes = data_bytes.rsplit(b'..', 1)
+    filename, extension = splitext(file_bytes.decode('utf-8'))
+    file_details = f'Files/{filename}_extracted{extension}'
+    if not overwrite:
+        file_details = uniquify(file_details)
+    with open(file_details, 'wb') as file:
+        file.write(data_bytes)
+        file.close()
 
 
 def generate_numbers(min_value: int, max_value: int, number_values: int):
@@ -172,10 +185,7 @@ def generate_numbers(min_value: int, max_value: int, number_values: int):
 def generate_message(Config: object, data: str, coords: list):
     ''' Returns: Generated binary data to be attached to image. '''
     capacity = len(coords)
-    if Config.STORED == 'data':
-        data = binary_conversion(data, 'binary')
-    else:
-        data = binary_file(data)
+    data = binary_encode(data, Config)
     end_key_size = len(integer_conversion(capacity, 'binary'))
     data_size = len(data)
     size = end_key_size + data_size
@@ -214,12 +224,25 @@ def attach_data(Image: Image, Config: object, binary_message: str, coords: list)
         Image.putpixel((coords[i][0], coords[i][1]), tuple(pixel))
     return Image
 
+def uniquify(file: str):
+    ''' Returns: File path unique from existing files. '''
+    if not exists(file):
+        return file
+    filename, extension = splitext(file)
+    counter = 1
+    while exists(file):
+        file = f'{filename}_{str(counter)}{extension}'
+        counter += 1
+    return file
 
-def save_image(filename: str, Image: Image, type: str = '.png'):
+
+def save_image(filename: str, Image: Image, overwrite: bool, extension: str = '.png'):
     ''' Returns: Saved image at location output. '''
-    filename = f'{filename[:-4]}_result{type}' if filename.endswith(type) \
-                else f'{filename}_result{type}'
-    Image.save(f'Images/{filename}')
+    filename = f'Files/{filename[:-4]}_stego122{extension}' if filename.endswith(extension) \
+                else f'Files/{filename}_stego122{extension}'
+    if not overwrite:
+        filename = uniquify(f'{filename}')
+    Image.save(filename)
 
 
 def extract_header(Image: Image, key: int, coords: list):
@@ -259,15 +282,14 @@ def extract_message(Image: Image, coords: list):
         end_key = extract_data(Image, coords[:end_key_size]) 
         data_size = integer_conversion(end_key, 'integer')
         coords = coords[end_key_size: data_size + end_key_size]
-        binary_message = extract_data(Image, coords)
-        return binary_conversion(binary_message, 'data')
+        return extract_data(Image, coords)
     except Exception as e:
         raise ValueError('Invalid data extracted') from e
 
 
 def data_insert(filename: str, data: str, key: str = '999', method: str = 'random',
                 stored: str = 'data', colours: list = None, indexs: list = None, 
-                noise: bool = False, encrypt: bool = False):
+                noise: bool = False, encrypt: bool = False, overwrite: bool = True):
     ''' Returns: Selected image with secret data steganographically attached. '''
     verify_string([filename, data, key])
     Image, Size = load_image(filename)
@@ -278,10 +300,10 @@ def data_insert(filename: str, data: str, key: str = '999', method: str = 'rando
     data_coords = generate_coords(Config, Size, cut_coords)
     binary_message = generate_message(Config, data, data_coords)
     Image = attach_data(Image, Config, binary_message, data_coords)
-    save_image(filename, Image)
+    save_image(filename, Image, overwrite)
 
 
-def data_extract(filename: str, key: str = '999'):
+def data_extract(filename: str, key: str = '999', overwrite: bool = True):
     ''' Returns: Data steganographically extracted from selected image. '''
     verify_string([filename, key])
     Image, Size = load_image(filename)
@@ -289,4 +311,5 @@ def data_extract(filename: str, key: str = '999'):
     setup, cut_coords = extract_header(Image, image_key, coords)
     Config = build_object(image_key, setup[0], setup[1], setup[2], setup[3], setup[4])
     data_coords = generate_coords(Config, Size, cut_coords)
-    return extract_message(Image, data_coords)
+    binary = extract_message(Image, data_coords)
+    binary_decode(binary, Config, overwrite)
