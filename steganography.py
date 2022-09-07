@@ -180,7 +180,7 @@ def binary_decode(data: str, Config: object, overwrite: bool):
     data_bytes = int(data, 2).to_bytes((len(data) + 7) // 8, byteorder='big')
     if Config.STORED != 'file':
         print(data_bytes.decode('utf-8')) # Print to terminal
-    file_bytes, data_bytes = data_bytes.rsplit(b'..', 1)
+    file_bytes, data_bytes = data_bytes.split(b'..', 1)
     filename, extension = splitext(file_bytes.decode('utf-8'))
     file_details = f'Files/{filename}_extracted{extension}'
     if not overwrite:
