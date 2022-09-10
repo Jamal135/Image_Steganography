@@ -4,12 +4,52 @@
 from io import BufferedReader, BytesIO
 from os import path
 from tempfile import TemporaryDirectory
-from typing import IO, BinaryIO
+from typing import BinaryIO #, IO
 from functools import reduce
 from itertools import product
 from secrets import token_hex
 from random import seed, sample, randint
 from PIL import Image
+
+
+DEFAULT_ENVKEY = '122stegodefault2923283283238232' # Instance key
+HEADER_LENGTH = 13 # Length of the header bits string
+
+
+class Size:
+    ''' Specifies dimensions of image file. '''
+    width: int
+    ''' Pixel width of the image file. '''
+    height: int
+    ''' Pixel height of the image file. '''
+    pixels: int
+    ''' Number of pixels in image file. '''
+
+
+class Config:
+    ''' Specifies steganography configuration. '''
+    colours: list
+    ''' Unique list of integers 0-2 for RGB colours. '''
+    indexs: list
+    ''' Unique list of integers 0-7 for bit indexs. '''
+    encrypt: bool
+    ''' Boolean if data is encrypted or not. '''
+    noise: bool
+    ''' Boolean if empty data space is filled. '''
+    volume: int
+    ''' Integer number data bit positions per pixel. '''
+    key: int
+    ''' Integer password for how data is stored in image. '''
+    method: str # Revisit later
+    ''' If all, all colours used, else if random one picked per pixel. '''
+
+
+class FileData:
+    ''' Specifies file and file data. '''
+    filename: str
+    ''' Name of the file with file extension. '''
+    data: bytes
+    ''' The bytes of the given file. '''
 
 
 def verify_string(items: list):
@@ -23,12 +63,7 @@ def load_image(file: BinaryIO):
     ''' Returns: Image object and class of width, height, and size. '''
     img = Image.open(file)
     size = img.size
-
-    class Size():
-        WIDTH = size[0]
-        HEIGHT = size[1]
-        PIXELS = size[0] * size[1]
-    return img, Size
+    return img, size(width = size[0], height = size[1], pixels = size[0] * size[1])
 
 
 # def env_extract():
@@ -54,14 +89,14 @@ def decimal_encoding(text: str):
         raise ValueError(f'Failed to encode: {text}') from error
 
 
-def generate_context(key: int, envkey: str, image: Image, size: object, key_pixels: int = 16):
+def generate_context(key: int, envkey: str, image: Image, size: Size, key_pixels: int = 16):
     ''' Returns: List of tuple coordinates in image and image specific key. '''
-    coords = [*product(range(size.WIDTH), range(size.HEIGHT))]
+    coords = [*product(range(size.width), range(size.height))]
     environment_key = decimal_encoding(envkey)
     coords = shuffle(environment_key, coords)
     key = decimal_encoding(key)
-    key *= (size.PIXELS * 99)  # Adjust key by image size
-    coords = shuffle(key, [*product(range(size.WIDTH), range(size.HEIGHT))])
+    key *= (size.pixels * 99)  # Adjust key by image size
+    coords = shuffle(key, [*product(range(size.width), range(size.height))])
     pixels = [image.getpixel((coords[point][0], coords[point][1]))
               for point in range(key_pixels - 1)]
     key *= (sum(map(sum, pixels)))  # Adjust key by key pixels
@@ -69,20 +104,19 @@ def generate_context(key: int, envkey: str, image: Image, size: object, key_pixe
     return coords, key
 
 
-def generate_header(Config: object):
+def generate_header(config: Config):
     ''' Returns: Built binary header data specifying settings. '''
-    method_bin = '1' if Config.METHOD == 'random' else '0'
-    stored_bin = '1' if Config.STORED == 'data' else '0'
-    encrypt_bin = '1' if Config.ENCRYPT == True else '0'
+    method_bin = '1' if config.method == 'random' else '0'
+    encrypt_bin = '1' if config.encrypt else '0'
     colour_table = ['0', '0', '0']
-    for colour in Config.COLOURS:
+    for colour in config.colours:
         colour_table[colour] = '1'
     colour_bin = ''.join(colour_table)
     index_table = ['0', '0', '0', '0', '0', '0', '0', '0']
-    for index in Config.INDEXS:
+    for index in config.indexs:
         index_table[index] = '1'
     index_bin = ''.join(index_table)
-    return method_bin + stored_bin + encrypt_bin + colour_bin + index_bin
+    return method_bin + encrypt_bin + colour_bin + index_bin
 
 
 def random_sample(key: int, options: list, length: int, number_picked: int = 1):
@@ -99,19 +133,18 @@ def integer_conversion(data: int, method: str):
         return int(data, 2)
 
 
-def attach_header(img: Image.Image, key: int, header: str, coords: list):
+def attach_header(image: Image.Image, key: int, header: str, coords: list):
     ''' Returns: Modified image with header data attached for extraction. '''
-    LENGTH = 14  # Stored as random method, any colour, smallest index
-    header_coords = coords[:LENGTH]
-    colours = random_sample(key, [0, 1, 2], LENGTH)
+    header_coords = coords[:HEADER_LENGTH]
+    colours = random_sample(key, [0, 1, 2], HEADER_LENGTH)
     colours = [item for sublist in colours for item in sublist]
     for i, position in enumerate(header_coords):
-        pixel = list(img.getpixel((position[0], position[1])))
+        pixel = list(image.getpixel((position[0], position[1])))
         value = integer_conversion(pixel[colours[i]], 'binary')
         modified_value = integer_conversion(value[:-1] + header[i], 'integer')
         pixel[colours[i]] = modified_value
-        img.putpixel((coords[i][0], coords[i][1]), tuple(pixel))
-    return coords[LENGTH:], img
+        image.putpixel((coords[i][0], coords[i][1]), tuple(pixel))
+    return coords[HEADER_LENGTH:], image
 
 
 def list_verification(variable: str, items: list, allowed: list):
@@ -120,8 +153,8 @@ def list_verification(variable: str, items: list, allowed: list):
         if any(item not in allowed for item in items):
             raise ValueError(f'Invalid {variable} list argument: {items}')
         return len(set(items)) == len(items)
-    except Exception as exception:
-        raise ValueError(f'Invalid {variable} list argument: {items}') from exception
+    except Exception as error:
+        raise ValueError(f'Invalid {variable} list argument: {items}') from error
 
 
 def bool_verification(variable: str, value: bool):
@@ -136,30 +169,21 @@ def str_verification(variable: str, value: str, allowed: list):
         raise ValueError(f'Invalid string {variable} argument: {value}')
 
 
-def build_object(key: int, method: str, stored: str, encrypt: bool,
-                 colours: list, indexs: list, noise: bool = False):
+def build_object(key: int, method: str, encrypt: bool, colours: list,
+                 indexs: list, noise: bool = False):
     ''' Returns: Configuration object of steganographic storage settings. '''
     if colours is None:
         colours = [0, 1, 2]
     if indexs is None:
         indexs = [6, 7]
     str_verification('method', method, ['random', 'all'])
-    str_verification('stored', stored, ['data', 'file'])
     list_verification('indexs', indexs, [0, 1, 2, 3, 4, 5, 6, 7])
     list_verification('colours', colours, [0, 1, 2])
     bool_verification('encrypt', encrypt)
     bool_verification('noise', noise)
-
-    class Config:
-        VOLUME = len(colours) * len(indexs) if method == 'all' else len(indexs)
-        COLOURS = colours
-        ENCRYPT = encrypt
-        STORED = stored
-        INDEXS = indexs
-        METHOD = method
-        NOISE = noise
-        KEY = key
-    return Config
+    volume = len(colours) * len(indexs) if method == 'all' else len(indexs)
+    return Config(volume = volume, colours = colours, encrypt = encrypt, 
+                  indexs = indexs, method = method, noise = noise, key = key)
 
 
 def binary_encode(file: BinaryIO):
@@ -167,16 +191,12 @@ def binary_encode(file: BinaryIO):
     data_bytes = file.name.encode('utf-8') + file.read()
     return ''.join(f'{byte:08b}' for byte in data_bytes)
 
-class FileData:
-    filename: str
-    data: bytes
 
-def binary_decode(data: str, Config: object):
+def binary_decode(data: str):
     ''' Returns: Binary string converted to file of data. '''
     data_bytes = int(data, 2).to_bytes((len(data) + 7) // 8, byteorder='big')
     file_bytes, data_bytes = data_bytes.split(b'..', 1)
     file = BytesIO()
-    print(file_bytes)
     file.name = file_bytes.decode('utf-8')
     file.write(data_bytes)
     file.seek(0)
@@ -189,7 +209,7 @@ def generate_numbers(min_value: int, max_value: int, number_values: int):
     return ''.join([str(randint(min_value, max_value)) for _ in range(number_values)])
 
 
-def generate_message(Config: object, data: BinaryIO, coords: list):
+def generate_message(config: Config, data: BinaryIO, coords: list):
     ''' Returns: Generated binary data to be attached to image. '''
     capacity = len(coords)
     encoded = binary_encode(data)
@@ -198,38 +218,39 @@ def generate_message(Config: object, data: BinaryIO, coords: list):
     size = end_key_size + data_size
     if size > capacity:  # Test if message can fit inside the image
         raise ValueError(f'Message size exceeded by {size - capacity} bits')
-    noise = generate_numbers(0, 1, capacity - size) if Config.NOISE else ''
+    noise = generate_numbers(0, 1, capacity - size) if config.noise else ''
     end_key = integer_conversion(data_size, 'binary').zfill(end_key_size)
     return end_key + encoded + noise  # Binary, end key specifies index of data end
 
 
-def generate_coords(Config: object, Size: object, pixel_coords: list):
+def generate_coords(config: Config, size: Size, pixel_coords: list):
     ''' Returns: Shuffled data location tuples (Width, Height, Colour, Index). '''
-    if Config.METHOD == 'random':  # If random need to pick random colour option per pixel
-        if len(Config.COLOURS) == 1:  # Don't random sample if only one colour option
-            colours = [Config.COLOURS] * Size.PIXELS
+    if config.method == 'random':  # If random need to pick random colour option per pixel
+        if len(config.colours) == 1:  # Don't random sample if only one colour option
+            colours = [config.colours] * size.pixels
         else:
-            colours = random_sample(Config.KEY, Config.COLOURS, Size.PIXELS)
+            colours = random_sample(config.key, config.colours, size.pixels)
     data_coords = []
     for i, coordinate in enumerate(pixel_coords):
-        for colour in colours[i] if Config.METHOD == 'random' else Config.COLOURS:
+        for colour in colours[i] if config.method == 'random' else config.colours:
             data_coords.extend((coordinate[0], coordinate[1], colour, index)
-                               for index in Config.INDEXS)
-    return shuffle(Config.KEY, data_coords)
+                               for index in config.indexs)
+    return shuffle(config.key, data_coords)
 
 
-def attach_data(img: Image.Image, Config: object, binary_message: str, coords: list):
+def attach_data(image: Image.Image, config: Config, binary_message: str, coords: list):
     ''' Returns: Image with all required pixels steganographically modified. '''
-    if not Config.NOISE:  # Optimise if not modifying every pixel
+    if not config.noise:  # Optimise if not modifying every pixel
         coords = coords[:len(binary_message)]
     for i, position in enumerate(coords):
-        pixel = list(img.getpixel((position[0], position[1])))
+        pixel = list(image.getpixel((position[0], position[1])))
         value = list(integer_conversion(pixel[position[2]], 'binary'))
         value[position[3]] = binary_message[i]
         modified_value = integer_conversion(''.join(value), 'integer')
         pixel[position[2]] = modified_value
-        img.putpixel((coords[i][0], coords[i][1]), tuple(pixel))
-    return img
+        image.putpixel((coords[i][0], coords[i][1]), tuple(pixel))
+    return image
+
 
 # def uniquify(file: str):
 #     ''' Returns: File path unique from existing files. '''
@@ -253,9 +274,8 @@ def attach_data(img: Image.Image, Config: object, binary_message: str, coords: l
 
 def extract_header(img: Image, key: int, coords: list):
     ''' Returns: Header data extracted and unpacked. '''
-    LENGTH = 14  # Header coded to 1 for true, 0 for false
-    header_coords = coords[:LENGTH]
-    colours = random_sample(key, [0, 1, 2], LENGTH)
+    header_coords = coords[:HEADER_LENGTH]
+    colours = random_sample(key, [0, 1, 2], HEADER_LENGTH)
     colours = [item for sublist in colours for item in sublist]
     header = []
     for i, position in enumerate(header_coords):
@@ -263,11 +283,10 @@ def extract_header(img: Image, key: int, coords: list):
         value = integer_conversion(pixel[colours[i]], 'binary')
         header.append(value[-1])
     method = 'random' if header[0] == '1' else 'all'
-    stored = 'data' if header[1] == '1' else 'file'
     encrypt = header[2] == '1'
     colours = [i for i in range(3) if header[i + 3] == '1']
     indexs = [i for i in range(8) if header[i + 6] == '1']
-    return [method, stored, encrypt, colours, indexs], coords[LENGTH:]
+    return [method, encrypt, colours, indexs], coords[HEADER_LENGTH:]
 
 
 def extract_data(img: Image, coords: list):
@@ -281,7 +300,7 @@ def extract_data(img: Image, coords: list):
 
 
 def extract_message(img: Image, coords: list):
-    ''' Returns: Data stored steganographically within the image. '''
+    ''' Returns: Data that was steganographically inside the image. '''
     capacity = len(coords)
     end_key_size = len(integer_conversion(capacity, 'binary'))
     try:
@@ -289,38 +308,36 @@ def extract_message(img: Image, coords: list):
         data_size = integer_conversion(end_key, 'integer')
         coords = coords[end_key_size: data_size + end_key_size]
         return extract_data(img, coords)
-    except Exception as e:
-        raise ValueError('Invalid data extracted') from e
+    except Exception as error:
+        raise ValueError('Invalid data extracted') from error
 
-DEFAULTENVKEY = '122stegodefault2923283283238232'
 
 def data_insert(image_file: BufferedReader, input_file: BufferedReader, key: str = '999',
-envkey: str = DEFAULTENVKEY, method: str = 'random',
-                stored: str = 'data', colours: list = None, indexs: list = None, 
-                noise: bool = False, encrypt: bool = False):
+                envkey: str = DEFAULT_ENVKEY, method: str = 'random', colours: list = None,
+                indexs: list = None, noise: bool = False, encrypt: bool = False):
     ''' Returns: Selected image with secret data steganographically attached. '''
     verify_string([key])
-    old_image, Size = load_image(image_file)
-    coords, image_key = generate_context(key, envkey, old_image, Size)
-    Config = build_object(image_key, method, stored, encrypt, colours, indexs, noise)
-    header = generate_header(Config) # Specifies Configuration for extract
+    old_image, size = load_image(image_file)
+    coords, image_key = generate_context(key, envkey, old_image, size)
+    config = build_object(image_key, method, encrypt, colours, indexs, noise)
+    header = generate_header(config) # Specifies Configuration for extract
     cut_coords, image = attach_header(old_image, image_key, header, coords)
-    data_coords = generate_coords(Config, Size, cut_coords)
-    binary_message = generate_message(Config, input_file, data_coords)
-    image = attach_data(image, Config, binary_message, data_coords)
+    data_coords = generate_coords(config, size, cut_coords)
+    binary_message = generate_message(config, input_file, data_coords)
+    image = attach_data(image, config, binary_message, data_coords)
     with TemporaryDirectory() as tempdir:
         image.save(path.join(tempdir, f'temp.{image.format}'))
         return open(path.join(tempdir, f'temp.{image.format}'), 'rb')
 
 
-def data_extract(file: BinaryIO, key: str = '999', envkey: str = DEFAULTENVKEY):
+def data_extract(file: BinaryIO, key: str = '999', envkey: str = DEFAULT_ENVKEY):
     ''' Returns: Data steganographically extracted from selected image. '''
     verify_string([key])
     image, size = load_image(file)
     coords, image_key = generate_context(key, envkey, image, size)
     setup, cut_coords = extract_header(image, image_key, coords)
-    Config = build_object(
+    config = build_object(
         image_key, setup[0], setup[1], setup[2], setup[3], setup[4])
-    data_coords = generate_coords(Config, size, cut_coords)
+    data_coords = generate_coords(config, size, cut_coords)
     binary = extract_message(image, data_coords)
-    return binary_decode(binary, Config)
+    return binary_decode(binary)

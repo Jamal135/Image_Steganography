@@ -1,42 +1,48 @@
+''' Creation Date: 08/09/2022 '''
+
+
+from contextlib import suppress
 from os import getenv, path
-from steganography import data_extract, data_insert
 from sys import argv
 from dotenv import load_dotenv
+from steganography import data_extract, data_insert
+
 
 def extract():
-    try: argv[1]
-    except IndexError: 
+    ''' Returns: steganographically extracted file from image. '''
+    try:
+        argv[1]
+    except IndexError:
         print(f"Usage: {argv[0]} <file> <outpath (default=.)> [key]")
         exit()
     load_dotenv()
     envkey = getenv("ENVIRONMENTKEY")
-    args = {}
-    args["file"] = open(argv[1], 'rb')
-    try:
+    args = {"file": open(argv[1], 'rb')}
+    with suppress(IndexError):
         args["key"] = argv[3]
-    except IndexError:
-        pass
     if envkey is not None:
         args["envkey"] = envkey
     with data_extract(**args) as data:
-        try: outpath = argv[2]
-        except IndexError: outpath = path.join(".", data.name)
+        try:
+            outpath = argv[2]
+        except IndexError:
+            outpath = path.join(".", data.name)
         with open(outpath, "wb") as o:
             o.write(data.read())
 
+
 def insert():
-    try: argv[1]
+    ''' Returns: Image with data steganographically attached. '''
+    try:
+        argv[1]
     except IndexError:
         print(f"Usage: {argv[0]} <file> <data> [key]")
         exit()
     load_dotenv()
     envkey = getenv("ENVIRONMENTKEY")
-    args = {}
-    args["input_file"] = open(argv[2], 'rb')
-    try:
+    args = {'input_file': open(argv[2], 'rb')}
+    with suppress(IndexError):
         args["key"] = argv[4]
-    except IndexError:
-        pass
     if envkey is not None:
         args["envkey"] = envkey
     with open(argv[1], 'rb') as args["image_file"]:
