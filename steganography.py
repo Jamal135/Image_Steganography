@@ -18,38 +18,41 @@ HEADER_LENGTH = 13 # Length of the header bits string
 
 class Size:
     ''' Specifies dimensions of image file. '''
-    width: int
-    ''' Pixel width of the image file. '''
-    height: int
-    ''' Pixel height of the image file. '''
-    pixels: int
-    ''' Number of pixels in image file. '''
+    def __init__(self, width: int, height: int, pixels: int):
+        self.width = width
+        ''' Pixel width of the image file. '''
+        self.height = height
+        ''' Pixel height of the image file. '''
+        self.pixels = pixels
+        ''' Number of pixels in image file. '''
 
 
 class Config:
     ''' Specifies steganography configuration. '''
-    colours: list
-    ''' Unique list of any integers 0-2 for RGB colours. '''
-    indexs: list
-    ''' Unique list of any integers 0-7 for bit indexs. '''
-    encrypt: bool
-    ''' Boolean if data is encrypted or plaintext. '''
-    noise: bool
-    ''' Boolean if empty data space is filled or untouched. '''
-    volume: int
-    ''' Integer number data bit positions per pixel. '''
-    key: int
-    ''' Integer password for how data is stored in image. '''
-    method: str # Revisit later
-    ''' If all, all colours used, else if random one picked per pixel. '''
+    def __init__(self, colours: list, indexs: list, encrypt: bool,
+                 noise: bool, volume: int, key: int, method: str):
+        self.colours = colours
+        ''' Unique list of any integers 0-2 for RGB colours. '''
+        self.indexs = indexs
+        ''' Unique list of any integers 0-7 for bit indexs. '''
+        self.encrypt = encrypt
+        ''' Boolean if data is encrypted or plaintext. '''
+        self.noise = noise
+        ''' Boolean if empty data space is filled or untouched. '''
+        self.volume = volume
+        ''' Integer number data bit positions per pixel. '''
+        self.key = key
+        ''' Integer password for how data is stored in image. '''
+        self.method = method # Revisit later
+        ''' If all, all colours used, else if random one picked per pixel. '''
 
 
-class FileData:
-    ''' Specifies file and file data. '''
-    filename: str
-    ''' Name of the file with file extension. '''
-    data: bytes
-    ''' The bytes of the given file. '''
+#class FileData:
+#    ''' Specifies file and file data. '''
+#    filename: str
+#    ''' Name of the file with file extension. '''
+#    data: bytes
+#    ''' The bytes of the given file. '''
 
 
 def verify_string(items: list):
@@ -61,9 +64,9 @@ def verify_string(items: list):
 
 def load_image(file: BinaryIO):
     ''' Returns: Image object and class of width, height, and size. '''
-    img = Image.open(file)
-    size = img.size
-    return img, size(width = size[0], height = size[1], pixels = size[0] * size[1])
+    image = Image.open(file)
+    size = image.size
+    return image, Size(width = size[0], height = size[1], pixels = size[0] * size[1])
 
 
 # def env_extract():
@@ -284,8 +287,8 @@ def extract_header(img: Image, key: int, coords: list):
         header.append(value[-1])
     method = 'random' if header[0] == '1' else 'all'
     encrypt = header[2] == '1'
-    colours = [i for i in range(3) if header[i + 3] == '1']
-    indexs = [i for i in range(8) if header[i + 6] == '1']
+    colours = [i for i in range(3) if header[i + 2] == '1']
+    indexs = [i for i in range(8) if header[i + 5] == '1']
     return [method, encrypt, colours, indexs], coords[HEADER_LENGTH:]
 
 
@@ -336,8 +339,7 @@ def data_extract(file: BinaryIO, key: str = '999', envkey: str = DEFAULT_ENVKEY)
     image, size = load_image(file)
     coords, image_key = generate_context(key, envkey, image, size)
     setup, cut_coords = extract_header(image, image_key, coords)
-    config = build_object(
-        image_key, setup[0], setup[1], setup[2], setup[3], setup[4])
+    config = build_object(image_key, setup[0], setup[1], setup[2], setup[3])
     data_coords = generate_coords(config, size, cut_coords)
     binary = extract_message(image, data_coords)
     return binary_decode(binary)

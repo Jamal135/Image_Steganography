@@ -27,8 +27,8 @@ def extract():
             outpath = argv[2]
         except IndexError:
             outpath = path.join(".", data.name)
-        with open(outpath, "wb") as o:
-            o.write(data.read())
+        with open(outpath, "wb") as output:
+            output.write(data.read())
 
 
 def insert():
@@ -47,5 +47,5 @@ def insert():
         args["envkey"] = envkey
     with open(argv[1], 'rb') as args["image_file"]:
         with data_insert(**args) as image:
-            with open(argv[3], "wb") as o:
-                o.write(image.read())
+            with open(argv[3], "wb") as output:
+                output.write(image.read())
