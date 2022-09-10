@@ -29,13 +29,13 @@ class Size:
 class Config:
     ''' Specifies steganography configuration. '''
     colours: list
-    ''' Unique list of integers 0-2 for RGB colours. '''
+    ''' Unique list of any integers 0-2 for RGB colours. '''
     indexs: list
-    ''' Unique list of integers 0-7 for bit indexs. '''
+    ''' Unique list of any integers 0-7 for bit indexs. '''
     encrypt: bool
-    ''' Boolean if data is encrypted or not. '''
+    ''' Boolean if data is encrypted or plaintext. '''
     noise: bool
-    ''' Boolean if empty data space is filled. '''
+    ''' Boolean if empty data space is filled or untouched. '''
     volume: int
     ''' Integer number data bit positions per pixel. '''
     key: int
