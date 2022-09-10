@@ -182,7 +182,7 @@ def build_object(key: int, method: str, encrypt: bool, colours: list,
     bool_verification('encrypt', encrypt)
     bool_verification('noise', noise)
     volume = len(colours) * len(indexs) if method == 'all' else len(indexs)
-    return Config(volume = volume, colours = colours, encrypt = encrypt, 
+    return Config(volume = volume, colours = colours, encrypt = encrypt,
                   indexs = indexs, method = method, noise = noise, key = key)
 
 
