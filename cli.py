@@ -5,6 +5,7 @@ from contextlib import suppress
 from sys import argv
 from os import getenv, path
 from posixpath import splitext
+import sys
 from genericpath import exists
 from dotenv import load_dotenv
 from steganography import data_extract, data_insert
@@ -36,21 +37,22 @@ def extract():
         argv[1]
     except IndexError:
         print(f'Usage: {argv[0]} <file> <outpath (default=.)> [key]')
-        exit()
+        sys.exit()
     load_dotenv()
     envkey = getenv('ENVIRONMENTKEY')
-    args = {'file': open(argv[1], 'rb')}
-    with suppress(IndexError):
-        args['key'] = argv[3]
-    if envkey is not None:
-        args['envkey'] = envkey
-    with data_extract(**args) as data:
-        try:
-            outpath = argv[2]
-        except IndexError:
-            outpath = uniquify(path.join('.', data.name))
-        with open(outpath, 'wb') as output:
-            output.write(data.read())
+    args = {}
+    with open(argv[1], 'rb') as args['file']:
+        with suppress(IndexError):
+            args['key'] = argv[3]
+        if envkey is not None:
+            args['envkey'] = envkey
+        with data_extract(**args) as data:
+            try:
+                outpath = argv[2]
+            except IndexError:
+                outpath = uniquify(path.join('.', data.name))
+            with open(outpath, 'wb') as output:
+                output.write(data.read())
 
 
 def insert():
@@ -62,16 +64,17 @@ def insert():
         exit()
     load_dotenv()
     envkey = getenv('ENVIRONMENTKEY')
-    args = {'input_file': open(argv[2], 'rb')}
-    with suppress(IndexError):
-        args['key'] = argv[4]
-    if envkey is not None:
-        args['envkey'] = envkey
-    with open(argv[1], 'rb') as args['image_file']:
-        with data_insert(**args) as image:
-            try:
-                output = argv[3]
-            except IndexError:
-                output = uniquify(default_name(argv[1]))
-            with open(output, "wb") as output:
-                output.write(image.read())
+    args = {}
+    with open(argv[2], 'rb') as args['input_file']:
+        with suppress(IndexError):
+            args['key'] = argv[4]
+        if envkey is not None:
+            args['envkey'] = envkey
+        with open(argv[1], 'rb') as args['image_file']:
+            with data_insert(**args) as image:
+                try:
+                    output = argv[3]
+                except IndexError:
+                    output = uniquify(default_name(argv[1]))
+                with open(output, "wb") as output:
+                    output.write(image.read())
