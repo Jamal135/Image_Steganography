@@ -3,8 +3,9 @@
 
 from io import BufferedReader, BytesIO
 from os import path
+from posixpath import basename
 from tempfile import TemporaryDirectory
-from typing import BinaryIO #, IO
+from typing import BinaryIO
 from functools import reduce
 from itertools import product
 from secrets import token_hex
@@ -47,14 +48,6 @@ class Config:
         ''' If all, all colours used, else if random one picked per pixel. '''
 
 
-#class FileData:
-#    ''' Specifies file and file data. '''
-#    filename: str
-#    ''' Name of the file with file extension. '''
-#    data: bytes
-#    ''' The bytes of the given file. '''
-
-
 def verify_string(items: list):
     ''' Purpose: Check all items in list are valid strings. '''
     for item in items:
@@ -67,15 +60,6 @@ def load_image(file: BinaryIO):
     image = Image.open(file)
     size = image.size
     return image, Size(width = size[0], height = size[1], pixels = size[0] * size[1])
-
-
-# def env_extract():
-#     ''' Returns: Environment key else default key. '''
-#     envkey = getenv('ENVIRONMENTKEY')
-#     if envkey is None:
-#         return '122stegodefault2923283283238232'
-#     else:
-#         return envkey
 
 
 def shuffle(key: int, data):
@@ -191,7 +175,7 @@ def build_object(key: int, method: str, encrypt: bool, colours: list,
 
 def binary_encode(file: BinaryIO):
     ''' Returns: File at data of data convert to binary. '''
-    data_bytes = file.name.encode('utf-8') + file.read()
+    data_bytes = basename(file.name).encode('utf-8') + b'..' + file.read()
     return ''.join(f'{byte:08b}' for byte in data_bytes)
 
 
@@ -253,26 +237,6 @@ def attach_data(image: Image.Image, config: Config, binary_message: str, coords:
         pixel[position[2]] = modified_value
         image.putpixel((coords[i][0], coords[i][1]), tuple(pixel))
     return image
-
-
-# def uniquify(file: str):
-#     ''' Returns: File path unique from existing files. '''
-#     if not exists(file):
-#         return file
-#     filename, extension = splitext(file)
-#     count = 1
-#     while exists(file):
-#         file = f'{filename}_{str(count)}{extension}'
-#         count += 1
-#     return file
-
-# def save_image(filename: str, Image: Image, overwrite: bool, extension: str = '.png'):
-#     ''' Returns: Saved image at location output. '''
-#     filename = f'Files/{filename[:-4]}_stego122{extension}' if filename.endswith(extension) \
-#         else f'Files/{filename}_stego122{extension}'
-#     if not overwrite:
-#         filename = uniquify(f'{filename}')
-#     Image.save(filename)
 
 
 def extract_header(img: Image, key: int, coords: list):
